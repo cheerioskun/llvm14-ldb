@@ -99,6 +99,7 @@ void *__ldb_thread_start(void *arg) {
 
   // initialize stack
   char *rbp = get_fs_rbp(); // this is the rbp of thread main
+  uint64_t caller_rbp = *((uint64_t *)rbp);
 
   // set ngen to 0
   *((uint64_t *)(rbp + 16)) = 0;
@@ -164,6 +165,9 @@ void *__ldb_thread_start(void *arg) {
 
   free(ebuf->events);
   free(ebuf);
+
+  // The scanner terminator must not clobber libc's callee-saved RBP.
+  *((uint64_t *)rbp) = caller_rbp;
 
   return ret;
 }
