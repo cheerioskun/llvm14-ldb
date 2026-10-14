@@ -13,7 +13,7 @@
   * ``memcached-1.6.19> ./configure``
 
 4. Replace Makefile with the one for LDB
-  * ``memcached-1.6.19> cp LLVM_DIR/apps/memcached-1.6.19/Maekfile ./``
+  * ``memcached-1.6.19> cp LLVM_DIR/apps/memcached-1.6.19/Makefile ./``
 
 5. Make sure ROOT\_PATH in Makefile is set correctly to the LLVM root directory.
 
@@ -22,3 +22,17 @@
 
 7. Execute Memcached with LDB libary preloaded (Note that core 0 is used for Stack Scanner and core 1 is for Logger by default)
   * ``LD_PRELOAD=LLVM_DIR/libldb/libshim.so taskset 0xfffc ./memcached -p 16636 -v -m 10240 --threads=8`` 
+
+## Small memtier integration
+
+The Mahoraga setup/run recipes use Memcached 1.6.19 with this patch and memtier
+2.5.2, one binary-protocol connection, and bounded localhost workloads:
+https://github.com/cheerioskun/mahoraga/tree/bootstrap/research-workspace/infra/ldb
+
+Unmodified memtier leaves request opaque IDs at zero. The optional small client
+patch in those recipes adds connection-local sequential IDs for a SET-only trace.
+Those IDs are not globally unique across connections or separate processes.
+
+The tested server configuration uses localhost port 16636, UDP disabled, a
+64 MiB cache, and four workers. LDB raw output/parser formats remain unchanged.
+Integration results do not establish a reproduced performance experiment.
