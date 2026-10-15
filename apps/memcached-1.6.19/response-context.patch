@@ -1,0 +1,76 @@
+--- a/memcached.h
++++ b/memcached.h
+@@ -731,6 +731,8 @@
+ typedef struct _mc_resp {
+     mc_resp_bundle *bundle; // ptr back to bundle
+     struct _mc_resp *next; // choo choo.
++    uint32_t ldb_response_tag; /* binary request opaque, owned by this response */
++    bool ldb_response_tag_valid;
+     int wbytes; // bytes to write out of wbuf: might be able to nuke this.
+     int tosend; // total bytes to send for this response
+     void *write_and_free; /** free this memory after finishing writing */
+--- a/memcached.c
++++ b/memcached.c
+@@ -2686,7 +2686,7 @@
+  *   TRANSMIT_SOFT_ERROR Can't write any more right now.
+  *   TRANSMIT_HARD_ERROR Can't write (c->state is set to conn_closing)
+  */
+-static enum transmit_result transmit(conn *c) {
++static enum transmit_result transmit_tcp(conn *c) {
+     assert(c != NULL);
+     struct iovec iovs[IOV_MAX];
+     struct msghdr msg;
+@@ -2739,6 +2739,22 @@
+ 
+     conn_set_state(c, conn_closing);
+     return TRANSMIT_HARD_ERROR;
++}
++
++/* A TCP write may batch responses belonging to different requests. Preserve
++ * batching and leave that shared work unassigned. A sole response owns its
++ * context across partial-write retries; never use the connection's last ID.
++ */
++static enum transmit_result transmit(conn *c) {
++    mc_resp *resp = c->resp_head;
++    if (resp && !resp->next && !resp->skip && resp->ldb_response_tag_valid) {
++        ldb_tag_set(resp->ldb_response_tag);
++    } else {
++        ldb_tag_clear();
++    }
++    enum transmit_result result = transmit_tcp(c);
++    ldb_tag_clear();
++    return result;
+ }
+ 
+ static void build_udp_header(unsigned char *hdr, mc_resp *resp) {
+@@ -3391,6 +3407,8 @@
+         }
+     }
+ 
++    /* Worker threads are reused for other connections after this callback. */
++    ldb_tag_clear();
+     return;
+ }
+ 
+--- a/proto_bin.c
++++ b/proto_bin.c
+@@ -79,8 +79,6 @@
+         c->binary_header.request.bodylen = ntohl(req->request.bodylen);
+         c->binary_header.request.cas = ntohll(req->request.cas);
+ 
+-	ldb_tag_set(ntohl(req->request.opaque));
+-
+         if (c->binary_header.request.magic != PROTOCOL_BINARY_REQ) {
+             if (settings.verbose) {
+                 fprintf(stderr, "Invalid magic:  %x\n",
+@@ -102,6 +100,10 @@
+             conn_set_state(c, conn_closing);
+             return -1;
+         }
++
++        c->resp->ldb_response_tag = ntohl(req->request.opaque);
++        c->resp->ldb_response_tag_valid = true;
++        ldb_tag_set(c->resp->ldb_response_tag);
+ 
+         c->cmd = c->binary_header.request.opcode;
+         c->keylen = c->binary_header.request.keylen;

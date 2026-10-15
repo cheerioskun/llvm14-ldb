@@ -36,3 +36,18 @@ Those IDs are not globally unique across connections or separate processes.
 The tested server configuration uses localhost port 16636, UDP disabled, a
 64 MiB cache, and four workers. LDB raw output/parser formats remain unchanged.
 Integration results do not establish a reproduced performance experiment.
+
+### Response-owned LDB context
+
+After applying `memcached-1.6.19.patch`, apply `response-context.patch` with
+`patch -p1 < /path/to/response-context.patch` in the extracted source directory.
+Rebuild every application object because the response structure changes. For a
+separate source directory, pass `ROOT_PATH=/absolute/path/to/llvm14-ldb` to make.
+
+The binary opaque ID is saved on the response object after a complete command
+header/key is available. TCP transmission restores a sole response's ID and
+clears it on return, including partial-write retries. Multiple queued responses
+are deliberately unassigned; batching and wire behavior are unchanged. TAG
+intervals may be disjoint segments of one request, not a continuous wall-time
+span. Callback exit clears context before the worker handles other connections.
+UDP, ASCII and shared batch attribution are not covered by this integration.
