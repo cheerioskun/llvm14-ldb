@@ -62,7 +62,9 @@ static int scan_stack(struct thread *th, uint64_t *rbp, struct stack_sample *sar
     uint64_t canary_and_tag = *(rbp + 1);
     uint32_t canary = (uint32_t)(canary_and_tag >> 32);
     if (canary != LDB_CANARY) {
-      return -1;
+      // A valid instrumented callback may have an uninstrumented parent.
+      // Keep its observed prefix; an invalid first frame is still a failed scan.
+      return frames > 0 ? frames : -1;
     }
     sarr->gen = *(rbp + 2);
     sarr->rip = *(rbp + 3);
