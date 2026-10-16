@@ -7,6 +7,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <syscall.h>
+#include <asm/prctl.h>
 #include <sys/ipc.h>
 #include <sys/shm.h>
 
@@ -127,12 +128,17 @@ inline __attribute__((always_inline)) char *get_rbp() {
   return rbp;
 }
 
+// Query once during thread initialization; the monitor uses the cached base.
+// ARCH_GET_FS works on x86-64 CPUs without the FSGSBASE instruction set.
 inline __attribute__((always_inline)) char *rdfsbase() {
-  char *fsbase;
+  unsigned long fsbase;
 
-  asm volatile ("rdfsbase %0 \n\t" : "=r"(fsbase) :: "memory");
+  if (syscall(SYS_arch_prctl, ARCH_GET_FS, &fsbase) == -1) {
+    perror("LDB: ARCH_GET_FS");
+    abort();
+  }
 
-  return fsbase;
+  return (char *)fsbase;
 }
 
 inline __attribute__((always_inline)) void setup_canary() {

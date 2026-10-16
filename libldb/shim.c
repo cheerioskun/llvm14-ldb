@@ -107,8 +107,10 @@ void *__ldb_thread_start(void *arg) {
   // set old RBP
   *((uint64_t *)rbp) = 0;
 
+  char *fsbase = rdfsbase();
+
   printf("New interposed thread is starting... thread ID = %ld\n", syscall(SYS_gettid));
-  printf("ngen = %lu, tls rbp = %p, real rbp = %p, tls = %p - %p\n", get_ngen(), get_fs_rbp(), get_rbp(), (void *)(rdfsbase()-200), (void *)rdfsbase());
+  printf("ngen = %lu, tls rbp = %p, real rbp = %p, tls = %p - %p\n", get_ngen(), get_fs_rbp(), get_rbp(), (void *)(fsbase-200), (void *)fsbase);
 
   // attach shared memory
   if (unlikely(!ldb_shared)) {
@@ -131,7 +133,7 @@ void *__ldb_thread_start(void *arg) {
   tidx = get_tidx();
   pid_t id = syscall(SYS_gettid);
   ldb_shared->ldb_thread_infos[tidx].id = id;
-  ldb_shared->ldb_thread_infos[tidx].fsbase = (char **)(rdfsbase());
+  ldb_shared->ldb_thread_infos[tidx].fsbase = (char **)fsbase;
   ldb_shared->ldb_thread_infos[tidx].stackbase = rbp;
   ldb_shared->ldb_thread_infos[tidx].ebuf = ebuf;
   pthread_spin_unlock(&(ldb_shared->ldb_tlock));
